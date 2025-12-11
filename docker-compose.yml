@@ -1,0 +1,25 @@
+version: '3.9'
+
+services:
+  chromadb:
+    # 使用 ChromaDB 官方最新镜像
+    image: chromadb/chroma:latest
+    container_name: chroma_server
+    
+    # 端口映射：左边是你要访问的本地端口，右边是容器内部端口
+    ports:
+      - "8000:8000"
+    
+    # 数据持久化（关键！）：
+    # 将本地当前目录下的 chroma_data 文件夹映射到容器内部
+    # 这样即使你删除了容器，你的向量数据还在本地文件夹里
+    volumes:
+      - ./chroma_data:/data
+      
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/data
+      - CHROMA_SERVER_NOFILE=65535 # 提高文件描述符限制，防止报错
+      
+    # 总是自动重启（除非手动停止），保证服务稳定
+    restart: always

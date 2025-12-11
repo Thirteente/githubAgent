@@ -1,0 +1,17 @@
+# 核心框架
+langchain==0.3.0
+langchain-community==0.3.0
+langchain-core==0.3.0
+langchain-openai==0.2.0  # 用于调用 OpenAI 格式的 API (包括 DeepSeek)
+
+# 数据加载与处理
+gitpython>=3.1.40        # LangChain 的 GitHubLoader 依赖此包
+tiktoken>=0.7.0          # Token 计算
+
+# 环境配置
+python-dotenv>=1.0.0     # 读取 .env 文件
+
+# 开发工具 (可选但推荐)
+black                    # 代码格式化
+isort                    # Import 排序
+ipykernel                # 用于在 VS Code 中运行 Jupyter Notebook
