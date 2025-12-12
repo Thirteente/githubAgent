@@ -2,6 +2,7 @@ from langchain_community.document_loaders import GithubFileLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter, Language
 from langchain_core.documents import Document
 from typing import List, Dict
+from src.config import settings
 import os
 from dotenv import load_dotenv
 load_dotenv()
@@ -27,18 +28,28 @@ EXTENSION_TO_LANGUAGE: Dict[str, Language] = {
 
 def ingest_repo(repo_name: str, branch:str = "main") -> List[Document]:
     """
-    加载github仓库，按照特定语言的后缀读取仓库中的文件，并使用对应语言的splitter对其切分。
-    
-    :param repo_name: 仓库名 "user/repo"
-    :type repo_name: str
-    :param branch: 分支名称，默认"main"
-    :type branch: str
-    :return: 切片列表
-    :rtype: List[Document]
+    加载 GitHub 仓库并按语言切分文件。
+
+    Args:
+        repo_name: 仓库全名，例如 "langchain-ai/langchain"
+        branch: 分支名称，默认为 "main"
+
+    Returns:
+        List[Document]: 切分后的文档列表
+
+    Raises:
+        ValueError: 当 Token 缺失或仓库名格式错误时抛出
     """
+    token = settings.GITHUB_TOKEN
+    if not token:
+        raise ValueError("未找到 GITHUB_ACCESS_TOKEN。请在 .env 文件中配置该变量以避免速率限制。")
+
+    if '/' not in repo_name:
+        raise ValueError(f"无效的仓库名 '{repo_name}'。格式应为 'owner/repo'。")
+
     loader = GithubFileLoader(
         repo=repo_name, 
-        access_token=os.getenv("GITHUB_ACCESS_TOKEN"),
+        access_token=settings.GITHUB_TOKEN,
         github_api_url="https://api.github.com",
         file_filter=lambda file_path: file_path.endswith(SUPPORTED_EXTENSIONS), # 只读指定类型的文件
         branch=branch,
@@ -53,13 +64,13 @@ def ingest_repo(repo_name: str, branch:str = "main") -> List[Document]:
         if lang not in splitters:
             splitters[lang] = RecursiveCharacterTextSplitter.from_language(
                 language=lang,
-                chunk_size=2000,
-                chunk_overlap=200
+                chunk_size=settings.CHUNK_SIZE,
+                chunk_overlap=settings.CHUNK_OVERLAP
             )
 
     splitters['default'] = RecursiveCharacterTextSplitter(
-        chunk_size=2000,
-        chunk_overlap=200
+        chunk_size=settings.CHUNK_SIZE,
+        chunk_overlap=settings.CHUNK_OVERLAP
     )
 
     # 按语言拆分文档

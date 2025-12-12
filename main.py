@@ -6,7 +6,7 @@ from src.rag.vectorstore import get_vectorstore
 from src.rag.reviewer import get_review_chain   
 
 def main():
-    repo_url = "go-resty/resty"
+    repo_url = "Thirteente/githubAgent"
     # documents = ingest_repo(repo_url, branch="main")
     # # print(documents[0])
 

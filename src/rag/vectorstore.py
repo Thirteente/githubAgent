@@ -2,23 +2,22 @@ import chromadb
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-
+from src.config import settings
 
 
 def get_vectorstore() -> Chroma:
-    embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2", cache_folder="./notebooks/models")
+    embedding_model = HuggingFaceEmbeddings(model_name=settings.EMBEDDING_MODEL, cache_folder=settings.CACHE_FOLDER)
 
-    client = chromadb.HttpClient(host="localhost", port=8000)
+    client = chromadb.HttpClient(settings.CHROMA_HOST, settings.CHROMA_PORT)
 
     # 测试数据库是否正确连接
     try:
         heartbeat = client.heartbeat()
-        print(f"Chroma Heartbeat: {heartbeat}") 
     except Exception as e:
-        print(f"连接失败: {e}")
+        raise ConnectionError(f"无法连接到 ChromaDB ({settings.CHROMA_HOST}:{settings.CHROMA_PORT})。请确保 Docker 容器已启动。错误信息: {e}")
 
     vector_store = Chroma(
-        collection_name="github_codebase",
+        collection_name=settings.COLLECTION_NAME,
         embedding_function=embedding_model,
         client=client
     )
