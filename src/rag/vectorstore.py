@@ -6,6 +6,12 @@ from src.config import settings
 
 
 def get_vectorstore() -> Chroma:
+    """
+    初始化并返回 ChromaDB 向量库客户端。
+    
+    Returns:
+        Chroma: 已初始化的 ChromaDB 向量库实例
+    """
     embedding_model = HuggingFaceEmbeddings(model_name=settings.EMBEDDING_MODEL, cache_folder=settings.CACHE_FOLDER)
 
     client = chromadb.HttpClient(settings.CHROMA_HOST, settings.CHROMA_PORT)

@@ -1,5 +1,9 @@
 import os
 from dataclasses import dataclass
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 @dataclass
 class Config:
@@ -18,5 +22,6 @@ class Config:
 
     # Github 配置
     GITHUB_TOKEN: str = os.getenv("GITHUB_ACCESS_TOKEN", "")
+
 
 settings = Config()
