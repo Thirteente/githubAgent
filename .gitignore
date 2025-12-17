@@ -1,3 +1,10 @@
 .env
-notebooks
-chroma_data
+notebooks/
+chroma_data/
+
+__pycache__/
+*.py[cod]
+.DS_Store
+
+.vscode/
+.idea/
