@@ -1,7 +1,7 @@
 from langchain_community.document_loaders import GithubFileLoader
 from langchain_core.documents import Document
 from typing import List, Dict
-from src.ingestion.tree_sitter_splitter import codeSplitter_with_treeSitter
+from src.ingestion.tree_sitter import Splitter_with_treeSitter
 from src.config import settings
 
 
@@ -59,8 +59,21 @@ def ingest_repo(repo_name: str, branch: str = "main") -> List[Document]:
 
     documents = loader.load()
     print(f"Loaded {len(documents)} documents")
+    return documents
 
-    split_docs = codeSplitter_with_treeSitter(documents)
+
+def split_repo(
+    documents: List[Document], repo_name: str, branch: str
+) -> List[Document]:
+    """
+    使用 tree-sitter 按语言结构切分代码文件。
+    Args:
+        documents (List[Document]): 待切分的文档列表
+    Returns:
+        List[Document]: 切分后的文档列表
+    """
+
+    split_docs = Splitter_with_treeSitter(documents)
 
     for split in split_docs:
         split.metadata["repo_name"] = repo_name

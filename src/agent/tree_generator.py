@@ -1,5 +1,5 @@
 import os
-from github import Github
+from github import Github, Auth
 from src.config import settings
 
 
@@ -9,8 +9,8 @@ def generate_repo_tree(repo_name: str, branch: str = "main") -> str:
     """
 
     token = settings.GITHUB_TOKEN
-
-    github = Github(token)
+    auth = Auth.Token(token)
+    github = Github(auth)
     repo = github.get_repo(repo_name)
 
     # recursive = True 表示递归获取所有子目录
@@ -67,4 +67,4 @@ def _build_tree(structure, prefix=""):
 
 
 if __name__ == "__main__":
-    print(generate_repo_tree("msiemens/tinydb", "master"))
+    print(generate_repo_tree("Thirteente/githubAgent", "main"))
