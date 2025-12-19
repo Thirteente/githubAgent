@@ -6,6 +6,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from src.rag.vectorstore import get_vectorstore
 from langgraph.graph import StateGraph, END
+import re
 
 
 class ReviewOutput(BaseModel):
@@ -28,8 +29,24 @@ ANALYZER_PROMPT = """
 【已知上下文】
 {context}
 
-请分析代码。如果你遇到**关键的**未知函数/类定义，请在 `unknown_symbols` 中列出它们的名字（不要列出标准库函数）。
-如果信息足够，请将 `is_complete` 设为 True 并输出详细报告。
+【当前状态】
+这是第 {loop_cnt} 次审查循环（最大允许 3 次）。
+
+【任务目标】
+请对代码进行深度审查，重点关注：潜在Bug、边界条件处理、类型安全和逻辑漏洞。
+
+【决策逻辑】
+1. **判断是否需要检索**：
+   - 如果代码调用了某个函数/类（如 `self.storage.read()`），且你在【已知上下文】中看不到其源码，你需要判断它是否是**本项目内部定义**的。
+   - **如果是标准库或知名第三方库**（如 `json.load`, `requests.get`, `List`, `Dict`, `Optional`等），**请绝对不要检索**，直接基于常识理解。
+   - **如果是项目内部逻辑**（如 `utils.process_data`, `User.login`等），且对判断是否存在 Bug 至关重要，请将其加入 `unknown_symbols`。
+
+2. **避免死循环**：
+   - 如果这是第 2 次或第 3 次循环，且你之前请求的符号依然没有出现在上下文中（说明检索失败），请**不要再次请求相同的符号**。
+   - 在这种情况下，请尝试根据现有信息进行“最佳猜测”并完成审查，将 `is_complete` 设为 True。
+
+3. **完成条件**：
+   - 当所有关键的内部依赖都已明确，或者虽然有缺失但不足以阻碍发现主要问题时，请生成详细报告。
 
 【输出格式要求】
 请务必输出合法的 JSON 格式，不要包含 Markdown 代码块标记（如 ```json）。
@@ -68,6 +85,7 @@ def analyzer_node(state: ReviewState) -> dict:
                 "target_code": target_code,
                 "context": full_context,
                 "format_instructions": format_instructions,  # 注入指令
+                "loop_cnt": state["loop_cnt"],
             }
         )
 
@@ -97,11 +115,38 @@ def retriever_node(state: ReviewState):
     print(f"   [Retriever] 正在查找: {state['unknown_symbols']}")
 
     for symbol in state["unknown_symbols"]:
-        # 首先查向量库
-        docs = vector_store.similarity_search(f"def {symbol}", k=1)
-        if docs:
+        # "definition of X" 能同时匹配 function_definition 和 class_definition
+        docs = vector_store.similarity_search(f"definition of {symbol}", k=3)
+
+        target_doc = None
+
+        # 2. 优先筛选：利用 Metadata 中的 type 字段
+        # 我们在 tree-sitter 切分时保存了 "function_definition" 或 "class_definition"
+        for doc in docs:
+            doc_type = doc.metadata.get("type", "")
+            if "definition" in doc_type:
+                # 双重确认：确保 symbol 真的出现在内容里（防止语义漂移）
+                if symbol in doc.page_content:
+                    target_doc = doc
+                    break
+
+        # 3. 次级筛选：如果 Metadata 没命中，尝试正则匹配内容
+        if not target_doc and docs:
+            # 匹配 "def symbol" 或 "class symbol"
+            pattern = re.compile(rf"(def|class)\s+{re.escape(symbol)}\b")
+            for doc in docs:
+                if pattern.search(doc.page_content):
+                    target_doc = doc
+                    break
+
+        # 4. 兜底：如果都没匹配上，取相关性最高的第一个（可能是用法，但也比没有好）
+        if not target_doc and docs:
+            target_doc = docs[0]
+
+        if target_doc:
+            source = target_doc.metadata.get("source", "unknown")
             new_context.append(
-                f"--- {symbol} 定义 (from {docs[0].metadata['source']}) ---\n{docs[0].page_content}"
+                f"--- {symbol} 定义 (from {source}) ---\n{target_doc.page_content}"
             )
         else:
             # 如果查不到，可以尝试查 L2

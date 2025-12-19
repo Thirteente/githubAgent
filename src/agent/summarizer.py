@@ -38,7 +38,8 @@ def generate_file_summaries(docs: List[Document]) -> Dict[str, str]:
 
     chain = ChatPromptTemplate.from_template(SUMMARY_TEMPLATE) | llm | StrOutputParser()
 
-    summaries = {}
+    batch_inputs = []
+    valid_docs = []
 
     # 批处理优化：实际生产中建议使用 llm.batch 或异步处理
     print(f"L2 摘要生成开始: 处理 {len(docs)} 个文件...")
@@ -49,14 +50,22 @@ def generate_file_summaries(docs: List[Document]) -> Dict[str, str]:
 
         # 1. 提取骨架
         skeleton = extract_skeleton(doc.page_content, ext)
+        if not skeleton.strip():
+            continue
 
-        # 2. 生成摘要
-        try:
-            summary = chain.invoke({"filepath": filepath, "skeleton": skeleton})
-            summaries[filepath] = summary
-            # print(f"摘要: {summary}")
-        except Exception as e:
-            print(f"摘要生成失败 ({filepath}): {e}")
-            summaries[filepath] = "无法生成摘要"
+        batch_inputs.append({"filepath": filepath, "skeleton": skeleton})
+        valid_docs.append(doc)
+
+    # 2. 生成摘要
+    try:
+        summaries_list = chain.batch(batch_inputs, config={"max_concurrency": 10})
+        # print(f"摘要: {summary}")
+    except Exception as e:
+        print(f"摘要生成失败 ({filepath}): {e}")
+
+    summaries = {}
+    for doc, summary in zip(valid_docs, summaries_list):
+        filepath = doc.metadata.get("source", "unknown")
+        summaries[filepath] = summary
 
     return summaries

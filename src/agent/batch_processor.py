@@ -35,7 +35,9 @@ REDUCE_TEMPLATE = """
 """
 
 
-def run_batch_review(critical_docs: List[Document], global_context: str):
+def run_batch_review(
+    critical_docs: List[Document], file_summaries: Dict[str, str], file_tree: str
+):
 
     batch_id = f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     print(f"=== 本次运行 ID: {batch_id} (可在 LangSmith 中搜索此 Tag) ===")
@@ -46,7 +48,7 @@ def run_batch_review(critical_docs: List[Document], global_context: str):
         source = doc.metadata["source"]
         if source not in docs_by_file:
             docs_by_file[source] = []
-        docs_by_file[source].append(doc.page_content)
+        docs_by_file[source].append(doc)
 
     # 进行审查
     print(f"=== 开始批量审查: 共 {len(docs_by_file)} 个核心文件 ===")
@@ -54,14 +56,36 @@ def run_batch_review(critical_docs: List[Document], global_context: str):
     reviewer_app = build_reviewer_graph()
     file_reports = []
 
-    # TODO 暂时为串行之行，之后可改为并发
-    for source, code_chunks in docs_by_file.items():
-        print(f"启动审查: {source}")
+    batch_inputs = []
+    batch_configs = []
+    sources = []
+
+    MAX_CHUNKS_PER_FILE = 5
+
+    for source, codes in docs_by_file.items():
+        # print(f"启动审查: {source}")
+        sorted_codes = sorted(
+            codes,
+            key=lambda x: x.metadata.get(
+                "complexity",
+                999 if x.metadata.get("keep_reason") == "security_heuristic" else 0,
+            ),
+            reverse=True,
+        )
+
+        target_code_objects = sorted_codes[:MAX_CHUNKS_PER_FILE]
+        target_code_chunks = [code.page_content for code in target_code_objects]
+
+        current_summary = file_summaries.get(source, "暂无摘要信息。")
+
+        focused_context = (
+            f"「文件树」\n{file_tree}\n\n「当前文件职责」\n{current_summary}"
+        )
 
         initial_state = {
-            "target_docs": code_chunks,
+            "target_docs": target_code_chunks,
             "file_source": source,
-            "global_context": global_context,
+            "global_context": focused_context,
             "retrieved_context": [],
             "unknown_symbols": [],
             "loop_cnt": 0,
@@ -72,11 +96,28 @@ def run_batch_review(critical_docs: List[Document], global_context: str):
             "run_name": f"Review: {source.split('/')[-1]}",
             "tags": [batch_id, "code_review"],
             "metadata": {"source_file": source},
+            "max_concurrency": 10,
         }
 
-        result = reviewer_app.invoke(initial_state, config=config)
-        report = result.get("final_report", "无报告生成")
-        file_reports.append(f"### 文件: {source}\n{report}")
+        # result = reviewer_app.invoke(initial_state, config=config)
+        # report = result.get("final_report", "无报告生成")
+        # file_reports.append(f"### 文件: {source}\n{report}")
+
+        batch_inputs.append(initial_state)
+        batch_configs.append(config)
+        sources.append(source)
+
+    print("启用并发审查...")
+    results = reviewer_app.batch(
+        batch_inputs, config=batch_configs, return_exceptions=True
+    )
+
+    for source, result in zip(sources, results):
+        if isinstance(result, Exception):
+            file_reports.append(f"### 文件: {source}\n审查失败: {str(result)}")
+        else:
+            report = result.get("final_report", "无报告生成")
+            file_reports.append(f"### 文件: {source}\n{report}")
 
     if not file_reports:
         return "未生成任何审查报告（可能是没有核心代码通过了 L1 筛选）。"

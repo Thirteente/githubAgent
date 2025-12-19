@@ -14,6 +14,7 @@ from src.ingestion.complexity import filter_documents_l1
 from src.ingestion.tree_sitter import extract_skeleton
 from src.agent.summarizer import generate_file_summaries
 from src.agent.batch_processor import run_batch_review
+from src.agent.tree_generator import generate_repo_tree
 
 
 def main():
@@ -46,6 +47,7 @@ def main():
     repo_url = "msiemens/tinydb"
     branch = "master"
     documents = ingest_repo(repo_url, branch)
+    file_tree = generate_repo_tree(repo_url, branch)
     # documents_splitted = split_repo(documents, repo_url, branch="main")
     # L0 过滤文件
     core_docs, context_docs = filter_documents_l0(documents)
@@ -63,7 +65,7 @@ def main():
     vector_store.add_documents(docs)
 
     # L1 根据复杂度和正则得到核心代码
-    critical_chunks = filter_documents_l1(core_chunks, threshold=5)
+    critical_chunks = filter_documents_l1(core_chunks, threshold=10)
     print(f"关键代码块数量: {len(critical_chunks)}")
 
     # L2 生成全局概括
@@ -76,11 +78,11 @@ def main():
 
     l2_candidates = critical_full_files + context_docs
     file_summaries = generate_file_summaries(l2_candidates)
-    all_summaries_str = "\n".join([f"[{k}]: {v}" for k, v in file_summaries.items()])
+    # all_summaries_str = "\n".join([f"[{k}]: {v}" for k, v in file_summaries.items()])
 
     # L3 启用状态机进行最后审查
     print("\n=== 进入 L3 深度审查阶段 ===")
-    final_report = run_batch_review(critical_chunks, all_summaries_str)
+    final_report = run_batch_review(critical_chunks, file_summaries, file_tree)
     print("\n=== 最终审查报告 ===")
     print(final_report)
 

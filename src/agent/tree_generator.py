@@ -10,7 +10,7 @@ def generate_repo_tree(repo_name: str, branch: str = "main") -> str:
 
     token = settings.GITHUB_TOKEN
     auth = Auth.Token(token)
-    github = Github(auth)
+    github = Github(auth=auth)
     repo = github.get_repo(repo_name)
 
     # recursive = True 表示递归获取所有子目录
